@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0e11">
+<title>虚拟币模拟盘</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M8 0l8 8-8 8-8-8z%22 fill=%22%23f0b90b%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/app.css?v=38">
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="#/trade">◆ 模拟盘</a>
+  <nav class="dnav">
+    <a data-v="trade">交易</a><a data-v="assets">资产</a><a data-v="rank">排行榜</a><a data-v="guide">新手指南</a><a data-v="api">AI 接口</a>
+  </nav>
+  <div class="user" id="user"></div>
+</header>
+
+<div class="gate" id="gate"><div class="gate-c"><h2>◆ 虚拟币模拟盘</h2><p>请先使用 LINUX DO 或 NodeLoc 账号登录</p><a class="btn-y" href="/api/auth/login">LINUX DO 登录</a><a class="btn-y btn-nl" href="/api/auth/nodeloc/login">NodeLoc 登录</a></div></div>
+
+<main id="app">
+  <!-- ============ 交易 ============ -->
+  <section class="view" id="v-trade">
+    <aside class="markets" id="markets">
+      <div class="mk-head">
+        <input id="mk-q" placeholder="搜索币种 / 中文名" autocomplete="off">
+        <div class="mk-tabs"><button data-f="all" class="on">USDT</button><button data-f="fav">★ 自选</button></div>
+        <div class="mk-sort"><span data-s="sym">币种</span><span data-s="last">最新价</span><span data-s="chg">24h 涨跌</span></div>
+      </div>
+      <div class="mk-list" id="mk-list"></div>
+    </aside>
+
+    <div class="center">
+      <div class="symbar" id="symbar">
+        <button class="sym-btn" id="sym-btn"><b id="sb-name">BTC/USDT</b><small id="sb-cn"></small><i>▾</i></button>
+        <span class="fav-star" id="sb-fav" title="加入自选">☆</span>
+        <div class="sb-px"><b id="sb-last">--</b><small id="sb-usd"></small></div>
+        <div class="sb-stats">
+          <div><label>24h 涨跌</label><span id="sb-chg">--</span></div>
+          <div><label>24h 最高</label><span id="sb-h">--</span></div>
+          <div><label>24h 最低</label><span id="sb-l">--</span></div>
+          <div><label>24h 成交额</label><span id="sb-v">--</span></div>
+        </div>
+        <div class="sb-stats" id="sb-fund" hidden><div><label>资金费率 / 倒计时 <details class="tip inline" data-help="funding"></details></label><span id="sb-fr">--</span></div></div>
+        <button class="info-btn" id="sb-info">币种介绍</button>
+      </div>
+      <div class="coin-info" id="coin-info" hidden></div>
+
+      <div class="chart-box">
+        <div class="chart-tools">
+          <div class="tfs" id="tfs">
+            <button data-tf="line">分时</button><button data-tf="1m">1分</button><button data-tf="5m">5分</button><button data-tf="15m" class="on">15分</button><button data-tf="1h">1时</button><button data-tf="4h">4时</button><button data-tf="1d">日线</button><button data-tf="1w">周线</button>
+          </div>
+          <div class="inds">
+            <label><input type="checkbox" id="ind-ma" checked>MA</label>
+            <label><input type="checkbox" id="ind-vol" checked>成交量</label>
+          </div>
+        </div>
+        <div class="legend" id="legend"></div>
+        <div id="chart"></div>
+        <details class="tip" data-help="kline"></details>
+      </div>
+
+      <div class="m-tabs" id="m-tabs"><button data-p="form" class="on">下单</button><button data-p="book">盘口</button><button data-p="trades">最新成交</button></div>
+
+      <div class="trade-form pane-form" id="trade-form">
+        <div class="mode-tabs"><button data-m="spot" class="on">现货</button><button data-m="perp">合约 <small>最高 400x</small></button></div>
+
+        <!-- 现货 -->
+        <div id="f-spot">
+          <div class="side-tabs"><button data-side="buy" class="on buy">买入</button><button data-side="sell" class="sell">卖出</button></div>
+          <div class="otype"><button data-ot="limit" class="on">限价</button><button data-ot="market">市价</button><details class="tip inline" data-help="otype"></details></div>
+          <div class="row-av"><span>可用</span><b id="s-av">--</b></div>
+          <div class="field" id="s-px-f"><label>价格</label><input id="s-px" inputmode="decimal"><span>USDT</span></div>
+          <div class="field" id="s-mkt-f" hidden><label>价格</label><input value="以市场最优价成交" disabled><span></span></div>
+          <div class="field"><label id="s-qty-l">数量</label><input id="s-qty" inputmode="decimal"><span id="s-qty-u">BTC</span></div>
+          <div class="pct"><input type="range" id="s-pct" min="0" max="100" step="1" value="0"><div class="pct-btns"><button data-p="25">25%</button><button data-p="50">50%</button><button data-p="75">75%</button><button data-p="100">100%</button></div></div>
+          <div class="field" id="s-tot-f"><label>成交额</label><input id="s-tot" inputmode="decimal"><span>USDT</span></div>
+          <div class="est" id="s-est"></div>
+          <button class="go buy" id="s-go">买入 BTC</button>
+          <details class="tip" data-help="spot"></details>
+          <details class="tip" data-help="fee"></details>
+          <details class="tip" data-help="slip"></details>
+        </div>
+
+        <!-- 合约 -->
+        <div id="f-perp" hidden>
+          <div class="lev-row">
+            <label>杠杆倍数</label>
+            <div class="lev-ctl"><button id="lev-m">−</button><input id="lev" inputmode="numeric" value="20"><span>x</span><button id="lev-p">+</button></div>
+          </div>
+          <input type="range" id="lev-r" min="1" max="400" value="20">
+          <div class="otype potype"><button data-pt="market" class="on">市价</button><button data-pt="limit">限价</button><details class="tip inline" data-help="otype"></details></div>
+          <div class="lev-pre"><button>1</button><button>5</button><button>10</button><button>20</button><button>50</button><button>100</button><button>200</button><button>400</button></div>
+          <details class="tip" data-help="lev"></details>
+          <div class="row-av"><span>可用</span><b id="p-av">--</b></div>
+          <div class="field" id="p-px-f" hidden><label>委托价</label><input id="p-px" inputmode="decimal"><span>USDT</span></div>
+          <div class="field"><label>保证金</label><input id="p-mg" inputmode="decimal" placeholder="投入多少本金"><span>USDT</span></div>
+          <div class="pct"><input type="range" id="p-pct" min="0" max="100" step="1" value="0"><div class="pct-btns"><button data-p="10">10%</button><button data-p="25">25%</button><button data-p="50">50%</button><button data-p="100">100%</button></div></div>
+          <label class="chk"><input type="checkbox" id="p-tpsl-on"> 止盈 / 止损 <details class="tip inline" data-help="tpsl"></details></label>
+          <div id="p-tpsl" hidden>
+            <div class="field"><label>止盈价</label><input id="p-tp" inputmode="decimal" placeholder="可不填"><span>USDT</span></div>
+            <div class="field"><label>止损价</label><input id="p-sl" inputmode="decimal" placeholder="可不填"><span>USDT</span></div>
+            <div class="tpsl-sug" id="p-sug"></div>
+          </div>
+          <div class="est" id="p-est"></div>
+          <div class="warn" id="p-warn" hidden></div>
+          <div class="go2"><button class="go buy" id="p-long">开多 ↑<small>看涨</small></button><button class="go sell" id="p-short">开空 ↓<small>看跌</small></button></div>
+          <details class="tip" data-help="perp"></details>
+          <details class="tip" data-help="liq"></details>
+          <details class="tip" data-help="funding"></details>
+          <details class="tip" data-help="mark"></details>
+          <details class="tip" data-help="fee"></details>
+        </div>
+      </div>
+    </div>
+
+    <aside class="side">
+      <div class="book pane-book" id="book-box">
+        <h3>盘口 <details class="tip inline" data-help="book"></details></h3>
+        <div class="bk-head"><span>价格(USDT)</span><span>数量</span><span>累计</span></div>
+        <div class="bk asks" id="bk-asks"></div>
+        <div class="bk-mid" id="bk-mid">--</div>
+        <div class="bk bids" id="bk-bids"></div>
+        <div class="bk-ratio" id="bk-ratio"></div>
+      </div>
+      <div class="trades pane-trades" id="trades-box">
+        <h3>最新成交 <details class="tip inline" data-help="trades"></details></h3>
+        <div class="bk-head"><span>价格(USDT)</span><span>数量</span><span>时间</span></div>
+        <div id="tr-list"></div>
+      </div>
+    </aside>
+
+    <div class="records">
+      <div class="rec-tabs" id="rec-tabs">
+        <button data-r="pos" class="on">合约持仓 <b id="n-pos"></b></button>
+        <button data-r="pord">合约委托 <b id="n-pord"></b></button>
+        <button data-r="open">现货委托 <b id="n-open"></b></button>
+        <button data-r="hist">历史委托</button>
+        <button data-r="phist">合约历史</button>
+        <button data-r="fund">资金费</button>
+        <button data-r="bal">现货资产</button>
+        <label class="only-cur"><input type="checkbox" id="only-cur"> 只看当前币种</label>
+      </div>
+      <div id="rec-body" class="rec-body"></div>
+    </div>
+  </section>
+
+  <!-- ============ 资产 ============ -->
+  <section class="view" id="v-assets" hidden>
+    <div class="card eq-card">
+      <div class="eq-top">
+        <div><label>总资产估值 (USDT)</label><b id="a-eq">--</b><small id="a-pnl"></small></div>
+        <div class="eq-side"><div><label>排名</label><span id="a-rank">--</span></div><div><label>初始资金</label><span>1,000,000</span></div></div>
+      </div>
+      <div class="eq-split" id="a-split"></div>
+      <h3>收益曲线 <details class="tip inline" data-help="equity"></details></h3>
+      <div id="eq-chart"></div>
+    </div>
+    <div class="card"><h3>现货持仓</h3><div id="a-hold"></div><details class="tip" data-help="cost"></details></div>
+    <div class="card"><h3>合约持仓</h3><div id="a-pos"></div></div>
+  </section>
+
+  <!-- ============ 排行榜 ============ -->
+  <section class="view" id="v-rank" hidden>
+    <div class="card">
+      <h3><span id="r-title">收益排行榜</span> <small id="r-ts"></small></h3>
+      <div class="r-tabs" id="r-tabs"><button data-b="top" class="on">📈 收益榜</button><button data-b="loss">📉 亏损榜</button></div>
+      <details class="tip" data-help="rank"></details>
+      <div id="r-me"></div>
+      <div id="r-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ 新手指南 ============ -->
+  <section class="view" id="v-guide" hidden><div class="card" id="guide"></div></section>
+
+  <!-- ============ API ============ -->
+  <section class="view" id="v-api" hidden><div class="card" id="api"></div></section>
+</main>
+
+<nav class="mnav" id="mnav">
+  <a data-v="markets">行情</a><a data-v="trade">交易</a><a data-v="assets">资产</a><a data-v="rank">排行</a><a data-v="guide">指南</a><a data-v="api">API</a>
+</nav>
+<div id="toast"></div>
+
+<script src="/lib/lwc.js"></script>
+<script src="/coins.js?v=6"></script>
+<script src="/app.js?v=30"></script>
+<script src="/tutorial.js?v=33"></script>
+</body>
+</html>
+

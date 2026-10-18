@@ -1,0 +1,22 @@
+[Unit]
+Description=SimTrade crypto paper trading API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=simtrade
+Group=simtrade
+EnvironmentFile=/etc/simtrade.env
+Environment=SIM_DATA=/var/lib/simtrade SIM_WWW_DATA=/var/www/aws/data SIM_LISTEN=127.0.0.1:8300
+ExecStart=/usr/bin/python3 /opt/simtrade/server.py
+Restart=always
+RestartSec=3
+MemoryMax=300M
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/simtrade /var/www/aws/data
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

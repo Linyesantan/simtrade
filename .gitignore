@@ -1,0 +1,27 @@
+# Byte-compiled / optimized / URL-encoded files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Backups and temporary files
+*.bak*
+.bak*
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Credentials and secrets
+*.env
+.env
+secret
+*.pem
+*.key
+
+# Local databases and runtime data
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.log
