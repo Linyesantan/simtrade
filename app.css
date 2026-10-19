@@ -139,6 +139,8 @@ code{font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--p2);paddin
 .api-ep td:first-child{color:var(--y)}
 #toast{position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:99;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
 #toast div{background:#2b3139;color:var(--t);padding:9px 16px;border-radius:6px;box-shadow:0 4px 18px rgba(0,0,0,.5);max-width:90vw}
+body.tut-card #toast{top:auto;bottom:24px}   /* 教程卡片占顶部时，toast 移到底部避免遮住教程文字 */
+.tut-loan{white-space:nowrap}
 #toast .ok{border-left:3px solid var(--up)}#toast .err{border-left:3px solid var(--dn)}
 .mnav,.m-tabs{display:none}
 

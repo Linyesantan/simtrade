@@ -183,10 +183,10 @@ const TUT = (() => {
       { t: '#rec-tabs', pre: () => setRec('pos'), h: '爆仓会弹出提示，并在“合约历史”里显示“强制平仓”。真实交易里请远离高倍杠杆。可以随时点“下一步”结束本章。' }
     ] },
     { id: 'loan', title: '第 10 章　借贷：没钱了怎么办', steps: [
-      { t: '#loan-btn', pre: () => { location.hash = '#/trade/BTC' }, h: '钱不够下单时<b>不会再报“余额不足”</b>，而是会自动弹出借贷窗口。顶部这个 <b>借贷</b> 按钮也随时可以借钱。教程里借到的是<b>练习钱</b>。' },
-      { t: '#loan-btn', h: '点开<b>借贷</b>试试：随便借一笔（比如 5,000），<b>没有利息</b>，借多久都行。', ok: () => (st.debt || 0) > 0, wait: '借到钱后自动继续', skip: true },
+      { t: '.tut-loan', pre: () => { location.hash = '#/trade/BTC' }, h: '钱不够下单时<b>不会再报“余额不足”</b>，而是会自动弹出借贷窗口。卡片上这个 <b>💰 借贷</b> 按钮也随时可以借钱。教程里借到的是<b>练习钱</b>。' },
+      { t: '.tut-loan', h: '点开 <b>💰 借贷</b> 试试：随便借一笔（比如 5,000），<b>没有利息</b>，借多久都行。', ok: () => (st.debt || 0) > 0, wait: '借到钱后自动继续', skip: true },
       { t: '#s-av', h: '借到的钱直接进<b>可用</b>余额，和普通钱一样用。<br>但记住：<b>欠款会从总资产里扣掉</b>。借来的钱亏掉后，<b>收益率会跌破 −100%</b>——“欠债王”就是这么诞生的。' },
-      { t: '#loan-btn', h: '最后记得还款：点<b>借贷</b>，窗口里有<b>还款</b>按钮，不收利息。<br>真实账户里也一样：没钱就借，亏完借的钱，收益率可以跌到 −100% 以下。本章到此结束。' }
+      { t: '.tut-loan', h: '最后记得还款：点 <b>💰 借贷</b>，窗口里有<b>还款</b>按钮，不收利息。<br>真实账户里也一样：没钱就借，亏完借的钱，收益率可以跌到 −100% 以下。本章到此结束。' }
     ] },
     { id: 'ai', title: '第 11 章　全部功能 + 让 AI 帮你交易', steps: [
       { t: () => mob() ? '#mnav' : '.dnav', u: ['nav'], h: '<i class="tu-tag">新</i>所有页面都解锁了：<b>资产</b>看总资产和收益曲线，<b>排行</b>看大家的收益排名，<b>API</b> 可以让 AI 帮你下单。' },
@@ -252,14 +252,14 @@ body.tl .tu-new{animation:tuNew 1.6s ease 2}@keyframes tuNew{0%,100%{box-shadow:
     banner = document.createElement('div'); banner.className = 'tut-banner';
     { const hd = document.querySelector('header.top'); if (hd) { hd.after(banner); hd.after(box) } else document.body.append(box, banner) }   // 卡片和横条放进页面流里，自己占一块空间，不压在内容上
     box.onclick = e => { const btn = e.target.closest('button'), a = btn && btn.dataset.a;
-      if (a === 'next') next(true); else if (a === 'prev') go(prog.cur, Math.max(0, prog.step - 1)); else if (a === 'exit') T.exit(); else if (a === 'menu') { T.pause(); location.hash = '#/guide' }
+      if (a === 'next') next(true); else if (a === 'prev') go(prog.cur, Math.max(0, prog.step - 1)); else if (a === 'exit') T.exit(); else if (a === 'menu') { T.pause(); location.hash = '#/guide' } else if (a === 'loan') openLoan();
       else if (a === 'reset') { if (confirm('把教程练习资金重置为 10,000 USDT？')) { st = fresh(); save(); S.hist = S.phist = null; loadMe(); toast('练习资金已重置') } }
       else if (a === 'more') { moreOpen = !moreOpen; btn.textContent = moreOpen ? '收起 ▴' : '更多 ▾'; const o = box.querySelector('.tut-more'); if (o) o.remove(); if (moreOpen) box.insertAdjacentHTML('beforeend', moreHtml()); place(); reveal(curEl) } };
-    banner.onclick = e => { const a = e.target.dataset.a; if (a === 'exit') T.exit(); if (a === 'reset') { if (confirm('把教程练习资金重置为 10,000 USDT？')) { st = fresh(); save(); S.hist = S.phist = null; loadMe(); toast('练习资金已重置') } } if (a === 'resume') go(prog.cur || CH[0].id, prog.step || 0); if (a === 'menu') location.hash = '#/guide' };
-    window.addEventListener('resize', place); document.addEventListener('toggle', () => setTimeout(place, 30), true); document.addEventListener('focusin', () => setTimeout(place, 30)); document.addEventListener('focusout', () => setTimeout(place, 30)); window.addEventListener('scroll', place, true); setInterval(() => { if (!curEl || !curStep || !T.active) return; const nt = typeof curStep.t === 'function' ? target(curStep) : null; if (nt && nt !== curEl) { curEl = nt; place() } else if (!curEl.isConnected) place() }, 300);
+    banner.onclick = e => { const a = e.target.dataset.a; if (a === 'exit') T.exit(); if (a === 'loan') openLoan(); if (a === 'reset') { if (confirm('把教程练习资金重置为 10,000 USDT？')) { st = fresh(); save(); S.hist = S.phist = null; loadMe(); toast('练习资金已重置') } } if (a === 'resume') go(prog.cur || CH[0].id, prog.step || 0); if (a === 'menu') location.hash = '#/guide' };
+    window.addEventListener('resize', place); document.addEventListener('toggle', () => setTimeout(place, 30), true); document.addEventListener('focusin', () => setTimeout(place, 30)); document.addEventListener('focusout', () => setTimeout(place, 30)); window.addEventListener('scroll', place, true); setInterval(() => { if (!curEl || !curStep || !T.active) return; const nt = target(curStep); if (nt && nt !== curEl) { curEl = nt; place() } else if (!curEl.isConnected) place() }, 300);
     document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#copy-prompt')) copiedAt = now() }, true);
   }
-  function renderBanner() { const card = !!(box && !box.hidden); banner.hidden = !T.active || card; document.body.classList.toggle('tut-on', T.active); document.body.classList.toggle('tut-card', T.active && card); banner.classList.toggle('tut-free', !!(freeAfter && prog.cur && !curEl)); banner.innerHTML = (freeAfter && prog.cur && !curEl ? `<b>✓ ${freeAfter} 完成</b><span>自由练习时间：随便买、随便卖，练够了再继续</span><button data-a="resume" class="btn-y tut-nextch">下一章 ▸</button>` : `<b>教程模式</b><span>本地练习资金 ${fu(me().equity)} USDT，不影响真实账户</span>${prog.cur && !curEl ? '<button data-a="resume">继续教程</button>' : ''}`) + `<button data-a="menu">章节</button><button data-a="reset">重置资金</button><button data-a="exit">退出教程</button>` }
+  function renderBanner() { const card = !!(box && !box.hidden); banner.hidden = !T.active || card; document.body.classList.toggle('tut-on', T.active); document.body.classList.toggle('tut-card', T.active && card); banner.classList.toggle('tut-free', !!(freeAfter && prog.cur && !curEl)); banner.innerHTML = (freeAfter && prog.cur && !curEl ? `<b>✓ ${freeAfter} 完成</b><span>自由练习时间：随便买、随便卖，练够了再继续</span><button data-a="resume" class="btn-y tut-nextch">下一章 ▸</button>` : `<b>教程模式</b><span>本地练习资金 ${fu(me().equity)} USDT，不影响真实账户</span>${prog.cur && !curEl ? '<button data-a="resume">继续教程</button>' : ''}`) + `<button data-a="loan">💰 借贷</button><button data-a="menu">章节</button><button data-a="reset">重置资金</button><button data-a="exit">退出教程</button>` }
   function target(s) { const sel = typeof s.t === 'function' ? s.t() : s.t; return $(sel) }
   // 引导卡片固定停在屏幕底部（手机在底部导航上方），不跟着目标跳；靠滚动页面把目标放进卡片上方的空白区
   const dock = () => { const m = mob(), W = innerWidth, bw = m ? W - 20 : Math.min(560, W - 40); return { m, bw, left: m ? 10 : Math.round((W - bw) / 2), bottom: m ? 70 : 16, top: m ? 84 : 96 } };
@@ -289,9 +289,9 @@ body.tl .tu-new{animation:tuNew 1.6s ease 2}@keyframes tuNew{0%,100%{box-shadow:
     t0 = now(); applyUnlock();
     if (s.pre) try { s.pre() } catch (e) { }
     setTimeout(() => {
-      curStep = s; curEl = target(s) || $('#app');
       const h = typeof s.h === 'function' ? s.h() : s.h, needs = !!s.ok;
-      box.innerHTML = `<div class="tut-h">${ch.title}<span>${prog.step + 1}/${ch.steps.length}</span></div><p>${h}</p>${needs ? `<p class="tut-w">👉 ${s.wait || '完成操作后自动继续'}</p>` : ''}<div class="tut-a">${prog.step ? '<button data-a="prev">上一步</button>' : ''}<button data-a="more" class="tut-mb">${moreOpen ? '收起 ▴' : '更多 ▾'}</button><span class="sp"></span>${needs ? '' : '<button class="btn-y" data-a="next">下一步</button>'}</div>${moreHtml()}`; if (typeof glossify === 'function') glossify(box.querySelector('p'));
+      box.innerHTML = `<div class="tut-h">${ch.title}<span>${prog.step + 1}/${ch.steps.length}</span></div><p>${h}</p>${needs ? `<p class="tut-w">👉 ${s.wait || '完成操作后自动继续'}</p>` : ''}<div class="tut-a">${prog.step ? '<button data-a="prev">上一步</button>' : ''}<button data-a="more" class="tut-mb">${moreOpen ? '收起 ▴' : '更多 ▾'}</button><button data-a="loan" class="tut-loan">💰 借贷</button><span class="sp"></span>${needs ? '' : '<button class="btn-y" data-a="next">下一步</button>'}</div>${moreHtml()}`; if (typeof glossify === 'function') glossify(box.querySelector('p'));
+      curStep = s; curEl = target(s) || $('#app');   // 卡片渲染后再取目标（目标可能是卡片里的按钮，如 💰 借贷）
       box.hidden = false; freeAfter = ''; shownAt = performance.now(); renderBanner(); place(); reveal(curEl); setTimeout(() => { if (curEl) reveal(curEl) }, 300); flash();
       if (needs) { let last = null, n = 0; timer = setInterval(() => {
         if (!s.ok()) { n = 0; return }
