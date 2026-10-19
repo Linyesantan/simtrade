@@ -9,7 +9,9 @@ input:focus{border-color:var(--y)}input[type=checkbox]{accent-color:var(--y)}
 .top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:24px;height:52px;padding:0 16px;background:var(--p);border-bottom:1px solid var(--line)}
 .logo{color:var(--y);font-weight:700;font-size:17px;white-space:nowrap}
 .dnav{display:flex;gap:20px;flex:1}.dnav a{color:var(--t2);font-weight:500}.dnav a.on,.dnav a:hover{color:var(--t)}
-.user{margin-left:auto;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.user{margin-left:auto;display:flex;align-items:center;gap:10px;white-space:nowrap;min-width:0}
+#user .uname{min-width:0;overflow:hidden;flex-shrink:1}
+#user #logout,#user #loan-btn{flex-shrink:0}   /* 退出/借贷永不被挤出屏幕 */
 .user img{width:24px;height:24px;border-radius:50%}
 .btn-y{background:var(--y);color:#181a20;border-radius:4px;padding:6px 14px;font-weight:600}
 .btn-g{background:var(--p2);border:1px solid var(--line);border-radius:4px;padding:5px 12px}
@@ -167,7 +169,11 @@ body.tut-on #app{padding-top:36px}
 .ln-quick{margin:6px 0 10px}
 /* ============ 手机 ============ */
 @media (max-width:1000px){
-  .dnav{display:none}.eqtop{display:none}.top{height:46px;padding:0 12px}
+  .dnav{display:none}.eqtop{display:none}.top{height:46px;padding:0 12px;gap:10px}
+  #user>a.btn-g[href="#/guide"]{display:none}   /* 手机上教程入口走底部“指南”，把位置让给退出 */
+  #user .badge-genius{display:none}
+  .user{gap:6px}
+  #user .uname{display:block;max-width:96px;text-overflow:ellipsis;white-space:nowrap}
   body{padding-bottom:calc(56px + env(safe-area-inset-bottom))}
   .mnav{display:grid;grid-template-columns:repeat(6,1fr);position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--p);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
   .mnav a{color:var(--t2);text-align:center;padding:9px 0 10px;font-size:12px}.mnav a.on{color:var(--y)}
