@@ -16,7 +16,8 @@ const HELP = {
   trades: ['最新成交是什么？', '市场上刚刚发生的每一笔真实交易：成交价、数量、时间。绿色是主动买入成交，红色是主动卖出成交。连续大量绿色说明买盘积极。'],
   equity: ['收益曲线怎么看？', '每 15 分钟记录一次你的总资产（现货按当前价折算 + 合约保证金和浮动盈亏）。曲线往上就是在赚钱。'],
   cost: ['持仓均价和盈亏怎么算？', '<b>持仓均价</b>：你买这些币平均花了多少钱一个（已包含手续费）。卖出一部分时均价不变。<br><b>浮动盈亏</b> =（现在的买一价 − 均价）× 持有数量。还没卖出之前都只是“账面”盈亏。'],
-  rank: ['排行榜怎么排？', '按总资产从高到低排名，每 30 秒更新一次。总资产 = USDT 余额 + 持有币种按当前价折算 + 合约保证金和未实现盈亏。每个 LINUX DO 账号只有一个模拟账户，初始 100 万 USDT。']
+  rank: ['排行榜怎么排？', '按总资产从高到低排名，每 30 秒更新一次。总资产 = USDT 余额 + 持有币种按当前价折算 + 合约保证金和未实现盈亏 − 欠款（净资产，可以为负）。每个 LINUX DO 账号只有一个模拟账户，初始 100 万 USDT。'],
+  loan: ['借贷是什么？欠款怎么算？', '钱不够下单时<b>不会再说“余额不足”</b>，而是直接弹出<b>借贷</b>窗口；顶部也有一个<b>借贷</b>按钮，随时可以借钱。<br><b>没有利息</b>：借多久都不收利息，随时可以还（借贷窗口里可以还款）。<br><b>欠款会从总资产里扣掉</b>：排行榜和收益曲线都按“净资产 = 总资产 − 欠款”计算。所以借来的钱亏掉后，<b>收益率会跌破 −100%</b>（比如本金 100 万又净欠 100 万，就是 −200%），排行榜上会显示负的总资产。<br>所有资金都是虚拟的，放心借。']
 };
 const GUIDE = [
   ['这个网站是什么？', '一个<b>虚拟币模拟交易</b>网站。每个 LINUX DO 账号登录后送 <b>1,000,000 虚拟 USDT</b>，用真实的市场行情（来自 OKX）练习买卖加密货币，比拼收益排名。<br>所有资金都是虚拟的：<b>不能充值、不能提现、不能兑换任何东西</b>，亏光了也没有真实损失。'],
@@ -43,7 +44,7 @@ async function api(path, body) {
   if (typeof TUT !== 'undefined' && TUT.handles(path)) return TUT.api(path, body);
   const r = await fetch('/api/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
   let j = {}; try { j = await r.json() } catch (e) { }
-  if (!r.ok) { const e = new Error(j.error || ('请求失败 ' + r.status)); e.status = r.status; throw e }
+  if (!r.ok) { const e = new Error(j.error || ('请求失败 ' + r.status)); e.status = r.status; e.code = j.code; e.need = j.need; throw e }
   return j;
 }
 const cn = s => (window.COINS[s] || [s])[0];
@@ -65,6 +66,9 @@ const S = {
 /* ================= 名词小词典：专业词点一下就有大白话解释 ================= */
 const GLOSS = {
   'USDT': '一种和美元 1:1 挂钩的币，1 USDT ≈ 1 美元。这里把它当“钱”用，所有币的价格都用它来标。',
+  '借贷': '向平台借钱：没有利息、随借随还。欠款会从总资产里扣掉，借来的钱亏掉后收益率会跌破 −100%。',
+  '欠款': '借贷还没还的部分。计算总资产（净资产）和收益率时会把它扣掉。',
+  '还款': '把欠款还上：借贷窗口里可以直接还款，不收利息。',
   '永续合约': '一种没有到期日的合约，想拿多久都行。为了让它的价格不偏离真实币价，多空双方会定期互相付“资金费”。',
   '现货': '真的把币买到手。涨了赚、跌了亏，最多亏光买币的钱，不会爆仓。',
   '合约': '手里不拿币，只押价格往哪走。押对赚差价，押错亏差价，还能加杠杆放大。',
@@ -182,15 +186,16 @@ function userBadges(uid, name) {
 
 function renderUser() {
   const u = $('#user');
-  if (S.me && S.me.tutorial) u.innerHTML = `<span class="mut num">练习资金 ${fu(S.me.equity)} U</span>`;
+  if (S.me && S.me.tutorial) u.innerHTML = `<button class="btn-g" id="loan-btn">借贷</button><span class="mut num">练习资金 ${fu(S.me.equity)} U</span>`;
   else if (S.me) {
     const isG = isGeniusUser(S.me.uid, S.me.name);
-    u.innerHTML = `<a class="btn-g" href="#/guide">教程</a><span class="mut num eqtop" title="总资产">${fu(S.me.equity)} U</span><span class="uname ${isG ? 'uname-genius' : ''}">${S.me.avatar ? `<img class="av ${isG ? 'av-genius' : ''}" src="${esc(S.me.avatar)}" alt="" referrerpolicy="no-referrer">` : ''}${esc(S.me.name)}</span>${userBadges(S.me.uid, S.me.name)}<button class="btn-g" id="logout">退出</button>`;
+    u.innerHTML = `<a class="btn-g" href="#/guide">教程</a><button class="btn-g" id="loan-btn" title="无息借贷">借贷</button><span class="mut num eqtop" title="总资产（净资产，已扣除欠款）">${fu(S.me.equity)} U</span><span class="uname ${isG ? 'uname-genius' : ''}">${S.me.avatar ? `<img class="av ${isG ? 'av-genius' : ''}" src="${esc(S.me.avatar)}" alt="" referrerpolicy="no-referrer">` : ''}${esc(S.me.name)}</span>${userBadges(S.me.uid, S.me.name)}<button class="btn-g" id="logout">退出</button>`;
   }
   else u.innerHTML = `<a class="btn-y" href="/api/auth/login">LINUX DO</a> <a class="btn-y btn-nl" href="/api/auth/nodeloc/login">NodeLoc</a>`;
   document.body.classList.toggle('guest', !S.me && S.loggedOut && !(typeof TUT !== 'undefined' && TUT.active));
   const te = $('#tut-exit'); if (te) te.onclick = () => TUT.exit();
   const lo = $('#logout'); if (lo) lo.onclick = async () => { await api('logout', {}); S.me = null; S.loggedOut = true; renderAll() };
+  const ln = $('#loan-btn'); if (ln) ln.onclick = () => openLoan();
 }
 async function loadMe() {
   const tut = typeof TUT !== 'undefined' && TUT.active;
@@ -198,7 +203,7 @@ async function loadMe() {
   try {
     const m = await api('me'); if (!!(m && m.tutorial) !== (typeof TUT !== 'undefined' && TUT.active)) return;
     if (!m.tutorial && m.acct && LS.get('acct', null) !== m.acct) { ['tut_state_v1', 'tut_progress_v2', 'tut_seen'].forEach(k => localStorage.removeItem(k)); LS.set('acct', m.acct); location.reload(); return }
-    S.me = m; if (!m.tutorial) showWelcome()
+    S.me = m; if (!m.tutorial) { showWelcome(); showAnn() }
   } catch (e) { if (e.status === 401) { if (typeof TUT !== 'undefined' && TUT.active) return; S.me = null; S.loggedOut = true } }
   renderUser(); renderForm(); renderRecords(); if (S.view === 'assets') renderAssets(!S.eqLoaded);
 }
@@ -439,7 +444,7 @@ $('#s-go').onclick = async () => {
     const r = await api('order', body);
     toast(r.status === 'filled' ? `成交：${buy ? '买入' : '卖出'} ${fq(r.qty)} ${S.sym}，均价 ${fps(r.fpx, S.sym, 'spot')}${r.slippage && Math.abs(r.slippage) > 1e-5 ? '，滑点 ' + (r.slippage * 100).toFixed(3) + '%' : ''}` : r.status === 'partial' ? `部分立即成交 ${fq(r.filled_qty)}，剩余 ${fq(r.open_qty)} 已挂单` : '限价单已挂出，可在“当前委托”查看');
     $('#s-qty').value = ''; $('#s-tot').value = ''; $('#s-pct').value = 0; S.hist = null; await loadMe(); if (r.status !== 'filled') setRec('open');
-  } catch (e) { toast(e.message, 'err') } finally { go.disabled = false }
+  } catch (e) { if (e.code === 'need_loan') openLoanModal(e.need); else toast(e.message, 'err') } finally { go.disabled = false }
 };
 
 /* ---- 合约 ---- */
@@ -500,7 +505,7 @@ async function perpOpen(side) {
     if (r.status === 'open') toast('合约限价单已挂出，价格到了才会开仓，可在“合约委托”查看');
     else toast(`${side === 'long' ? '开多' : '开空'}成功，均价 ${fps(r.entry, S.sym, 'swap')}，强平价 ${fps(r.liq, S.sym, 'swap')}${r.status === 'partial' ? '（部分成交，剩余已挂单）' : ''}`);
     $('#p-mg').value = ''; $('#p-pct').value = 0; await loadMe(); setRec(r.status === 'open' ? 'pord' : 'pos');
-  } catch (e) { toast(e.message, 'err') } finally { btns.forEach(b => b.disabled = false) }
+  } catch (e) { if (e.code === 'need_loan') openLoanModal(e.need); else toast(e.message, 'err') } finally { btns.forEach(b => b.disabled = false) }
 }
 $$('.potype>button').forEach(b => b.onclick = () => setPotype(b.dataset.pt));
 $('#p-px').oninput = () => { S.ppxTouched = true; calcPerp() };
@@ -604,6 +609,8 @@ async function renderAssets(loadCurve) {
   const eq = me.equity || 0, pnl = eq - me.init;
   $('#a-eq').textContent = fu(eq); $('#a-pnl').innerHTML = `<span class="${cls(pnl)}">总盈亏 ${pnl >= 0 ? '+' : ''}${fu(pnl)} USDT（${fpct(pnl / me.init)}）</span>`;
   $('#a-rank').textContent = me.rank ? `#${me.rank} / ${me.total}` : '统计中';
+  const de = $('#a-debt'); if (de) { de.textContent = (me.debt || 0) > 0 ? fu(me.debt) : '0'; de.classList.toggle('dn', (me.debt || 0) > 0) }
+  const al = $('#a-loan'); if (al) al.onclick = () => openLoanModal(0);
   const u = me.bal.USDT || [0, 0]; let spot = 0; for (const [a, [f, l]] of Object.entries(me.bal)) if (a !== 'USDT' && S.tick[a]) spot += (f + l) * S.tick[a].bid;
   let pm = 0, pu = 0, pn = 0; me.positions.forEach(p => { pm += p.margin; pu += p.upnl || 0; pn += p.net ?? p.upnl ?? 0 });
   $('#a-split').innerHTML = `<div>USDT 可用<b>${fu(u[0])}</b></div><div>挂单冻结<b>${fu(u[1])}</b></div><div>现货持仓市值<b>${fu(spot)}</b></div><div>合约保证金<b>${fu(pm)}</b></div><div>合约未实现盈亏<b class="${cls(pu)}">${pu >= 0 ? '+' : ''}${fu(pu)}</b><small class="vse ${cls(pn)}">净 ${pn >= 0 ? '+' : ''}${fu(pn)}</small></div>`;
@@ -663,7 +670,8 @@ async function renderApi() {
 完整文档：${host}/api.md （请先阅读）
 认证：请求头 Authorization: Bearer &lt;我的 API Key&gt;
 常用：GET ${host}/api/v1/me 查看账户；GET ${host}/api/v1/market/ticker 查看所有币价；
-POST ${host}/api/v1/order 现货下单；POST ${host}/api/v1/perp/open 开合约。</pre>
+POST ${host}/api/v1/order 现货下单；POST ${host}/api/v1/perp/open 开合约。
+POST ${host}/api/v1/loan 无息借贷 {amt}；POST ${host}/api/v1/loan/repay 还款 {amt}。</pre>
   <button class="btn-g" id="copy-prompt">复制这段话</button>
   <h3>接口一览</h3>
   <table class="api-ep"><tr><th>接口</th><th>说明</th></tr>
@@ -680,7 +688,9 @@ POST ${host}/api/v1/order 现货下单；POST ${host}/api/v1/perp/open 开合约
   <tr><td>POST /api/v1/perp/close</td><td>平仓 {id, pct?}，pct 默认 100</td></tr>
   <tr><td>POST /api/v1/perp/tpsl</td><td>修改止盈止损 {id, tp, sl}</td></tr>
   <tr><td>GET /api/v1/perp/positions?status=open|closed</td><td>合约持仓 / 历史</td></tr>
-  <tr><td>GET /api/v1/equity · /leaderboard</td><td>收益曲线 · 排行榜</td></tr></table>
+  <tr><td>GET /api/v1/equity · /leaderboard</td><td>收益曲线 · 排行榜</td></tr>
+  <tr><td>GET /api/v1/loan</td><td>当前欠款与借贷记录（无利息）</td></tr>
+  <tr><td>POST /api/v1/loan · /loan/repay</td><td>借款 {amt}（≤1000 万/笔）· 还款 {amt}</td></tr></table>
   <h3>示例</h3>
   <pre># 查看账户
 curl -H "Authorization: Bearer $KEY" ${host}/api/v1/me
@@ -711,6 +721,59 @@ async function loadTick() {
     if (typeof TUT !== 'undefined') TUT.onTick();
     if (first) { setSym(S.sym, true) } else { renderMarkets(); renderSymbar(); liveBar(); if (S.view === 'trade') { calcSpot(); calcPerp(); if (!S.pxTouched) renderForm() } }
   } catch (e) { } finally { tickBusy = false }
+}
+/* ================= 借贷（无利息） ================= */
+function openLoan() {
+  if (document.body.classList.contains('guest')) return;
+  openLoanModal(0);
+}
+function openLoanModal(need) {
+  if (document.querySelector('.loan-modal')) return;
+  api('loan').then(d => {
+    const box = document.createElement('div'); box.className = 'modal loan-modal';
+    box.innerHTML = `<div class="modal-c"><h3>💰 借贷（无利息）</h3>
+      <p class="mut">当前欠款 <b class="num ${d.debt > 0 ? 'dn' : ''}">${fu(d.debt)}</b> USDT。<b>借多久都不收利息</b>，随时可还。欠款从总资产里扣除，借来的钱亏掉会让<b>收益率跌破 −100%</b>。</p>
+      <div class="field"><label>借多少</label><input id="ln-amt" inputmode="decimal" value="${Math.max(1, Math.round(need || 0))}"><span>USDT</span></div>
+      <div class="pct-btns ln-quick"><button data-a="10000">1万</button><button data-a="100000">10万</button><button data-a="1000000">100万</button><button data-a="5000000">500万</button></div>
+      <button class="btn-y" id="ln-go" style="width:100%;padding:10px">确认借贷</button>
+      ${d.debt > 0 ? `<button class="btn-g" id="ln-repay" style="width:100%;margin-top:8px;padding:8px">还款 ${fu(d.debt)} USDT（全部还清）</button>` : ''}
+      ${d.items && d.items.length ? `<div class="ln-hist"><b>最近借贷记录</b>${d.items.slice(0, 6).map(x => `<div><span class="mut">${ftime(x.ts * 1000, 1)}</span><span class="num ${x.amt >= 0 ? 'up' : 'dn'}">${x.amt >= 0 ? '+' : ''}${fu(x.amt)}</span></div>`).join('')}</div>` : ''}
+      <button class="btn-g" id="ln-close" style="width:100%;margin-top:8px;padding:8px">关闭</button></div>`;
+    document.body.appendChild(box);
+    const amtEl = box.querySelector('#ln-amt');
+    box.querySelectorAll('.ln-quick [data-a]').forEach(b => b.onclick = () => { amtEl.value = b.dataset.a; amtEl.focus() });
+    box.querySelector('#ln-close').onclick = () => box.remove();
+    box.querySelector('#ln-go').onclick = async () => {
+      const amt = +amtEl.value; if (!(amt >= 1)) { toast('请输入借款金额', 'err'); return }
+      try { await api('loan', { amt }); toast(`已借入 ${fu(amt)} USDT（无利息）`); box.remove(); S.hist = S.phist = null; loadMe() } catch (e) { toast(e.message, 'err') }
+    };
+    const rp = box.querySelector('#ln-repay');
+    if (rp) rp.onclick = async () => {
+      try { const r = await api('loan/repay', { amt: d.debt }); toast(`已还清 ${fu(r.amt)} USDT`); box.remove(); S.hist = S.phist = null; loadMe() }
+      catch (e) { if (e.code === 'need_loan') toast('可用余额不够还款', 'err'); else toast(e.message, 'err') }
+    };
+  }).catch(e => toast(e.message, 'err'));
+}
+
+/* ================= 更新公告：所有登录用户显示，点“确认”后同账号不再显示 ================= */
+const ANN_VER = 1;
+const ANN_ITEMS = [
+  '<b>借贷功能上线</b>：钱不够下单不再报“余额不足”，会直接弹出借贷窗口；顶部新增<b>借贷</b>按钮，随借随还，<b>没有利息</b>。',
+  '<b>欠款计入收益</b>：借来的钱亏掉后欠款会一直记着，<b>收益率会跌破 −100%</b>；排行榜按净资产（总资产 − 欠款）排名，允许“倒欠”。',
+  '<b>互动教程新增第 10 章《借贷：没钱了怎么办》</b>，新手指南同步补充借贷与欠款说明。',
+  '<b>AI 接口</b>新增 <code>/api/v1/loan</code> 系列接口（借款/还款/记录），把 Key 交给 AI 也能借钱。'
+];
+function showAnn() {
+  if (!S.me || S.me.tutorial || (S.me.ann || 0) >= ANN_VER || document.querySelector('.modal')) return;
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = `<div class="modal-c"><h3>📣 本次更新</h3><ul class="ann-list">${ANN_ITEMS.map(x => `<li>${x}</li>`).join('')}</ul><button class="btn-y ann-ok">确认</button></div>`;
+  document.body.appendChild(d);
+  const ok = d.querySelector('.ann-ok');
+  ok.onclick = async () => {
+    ok.disabled = true;
+    try { await api('ann', { v: ANN_VER }); S.me.ann = ANN_VER; d.remove() }
+    catch (e) { ok.disabled = false; toast('保存失败，请稍后重试：' + e.message, 'err') }
+  };
 }
 function showWelcome() {
   if (LS.get('tut_seen', false) || document.querySelector('.modal')) return;

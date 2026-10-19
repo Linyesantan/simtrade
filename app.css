@@ -159,6 +159,10 @@ body.tut-on #app{padding-top:36px}
 .tut-ch b{flex:1;font-weight:500}.tut-ch small{color:var(--t3)}.tut-ctl{display:flex;gap:8px;margin-top:12px}
 .modal{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px}
 .modal-c{color:var(--t);font-size:14px;background:var(--p);border:1px solid var(--line);border-radius:10px;padding:18px 20px;max-width:380px;line-height:1.75}.modal-c h3{margin:0 0 6px}
+.ann-list{margin:10px 0 16px;padding-left:20px;line-height:1.7}.ann-list li{margin:7px 0}.ann-list code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px}
+.ann-ok{width:100%;padding:10px;font-size:15px;cursor:pointer}
+.ln-hist{margin-top:12px;font-size:12px}.ln-hist b{display:block;margin-bottom:4px}.ln-hist>div{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px dashed var(--line)}
+.ln-quick{margin:6px 0 10px}
 /* ============ 手机 ============ */
 @media (max-width:1000px){
   .dnav{display:none}.eqtop{display:none}.top{height:46px;padding:0 12px}

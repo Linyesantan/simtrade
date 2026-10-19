@@ -3,16 +3,16 @@
 const TUT = (() => {
   const KEY = 'tut_state_v1', PKEY = 'tut_progress_v2', FEE = .001, MFEE = .0008, PFEE = .0005, PMFEE = .0002, START = 10000;
   const fresh = () => ({ bal: { USDT: [START, 0] }, cost: {}, open: [], hist: [], positions: [], phist: [], porders: [], id: 1, created: Date.now() / 1000 });
-  let st = LS.get(KEY, null) || fresh(); st.porders = st.porders || [];
+  let st = LS.get(KEY, null) || fresh(); st.porders = st.porders || []; st.debt = st.debt || 0;
   const prog = LS.get(PKEY, { done: {}, cur: null, step: 0 });
   const save = () => { LS.set(KEY, st); LS.set(PKEY, prog) };
   const T = { active: false, st: () => st };
-  const err = m => { const e = new Error(m); e.status = 400; throw e };
+  const err = (m, code, need) => { const e = new Error(m); e.status = 400; if (code) e.code = code; if (need != null) e.need = need; throw e };
   const tk = s => { const t = S.tick[s]; if (!t) err('行情未就绪，稍等一下'); return t };
   const sk = s => { const t = (S.swap || {})[s] || S.tick[s]; if (!t) err('行情未就绪，稍等一下'); return t };
   const markOf = t => t.mark || (t.bid + t.ask) / 2;
   const bal = a => st.bal[a] || (st.bal[a] = [0, 0]);
-  const add = (a, df, dl) => { const b = bal(a); if (b[0] + df < -1e-9 || b[1] + dl < -1e-9) err('余额不足（教程练习资金）'); b[0] = Math.max(0, b[0] + df); b[1] = Math.max(0, b[1] + dl) };
+  const add = (a, df, dl) => { const b = bal(a); if (b[0] + df < -1e-9 || b[1] + dl < -1e-9) err('余额不足', 'need_loan', Math.max(0, -(b[0] + df), -(b[1] + dl))); b[0] = Math.max(0, b[0] + df); b[1] = Math.max(0, b[1] + dl) };
   const now = () => Date.now() / 1000;
   const mmr = L => Math.min(.004, .4 / L);
   const liq = p => { const m = mmr(p.lev); return p.side === 'long' ? Math.max(0, (p.entry * p.qty - p.margin) / (p.qty * (1 - m))) : (p.entry * p.qty + p.margin) / (p.qty * (1 + m)) };
@@ -30,7 +30,7 @@ const TUT = (() => {
     let eq = 0; const b = {}, cost = {};
     for (const [a, [f, l]] of Object.entries(st.bal)) { if (f + l < 1e-12 && a !== 'USDT') continue; b[a] = [f, l]; eq += a === 'USDT' ? f + l : (f + l) * (S.tick[a] ? S.tick[a].bid : 0); if (a !== 'USDT') cost[a] = st.cost[a] || 0 }
     const positions = st.positions.map(p => { const t = (S.swap || {})[p.sym] || S.tick[p.sym], mark = t ? markOf(t) : p.entry, u = upnl(p, mark); eq += Math.max(0, p.margin + u); return { ...p, mark, upnl: u, roe: u / p.margin, liq: liq(p) } });
-    return { name: '教程模式', tutorial: true, init: START, fee: FEE, perp_fee: PFEE, max_lev: 400, bal: b, cost, equity: eq, positions, porders: st.porders.slice().reverse(), open: st.open.slice().reverse(), hist: st.hist.slice(0, 30), rank: null, total: 0 };
+    return { name: '教程模式', tutorial: true, init: START, fee: FEE, perp_fee: PFEE, max_lev: 400, bal: b, cost, equity: eq - (st.debt || 0), debt: st.debt || 0, ann: 999999, positions, porders: st.porders.slice().reverse(), open: st.open.slice().reverse(), hist: st.hist.slice(0, 30), rank: null, total: 0 };
   }
   function order(d) {
     const s = d.sym, t = tk(s), side = d.side;
@@ -82,11 +82,13 @@ const TUT = (() => {
       case 'perp/funding': return { funding: [] };
       case 'perp/positions': return { positions: path.includes('closed') ? st.phist.slice(0, 100) : me().positions };
       case 'equity': return { init: START, points: [[Math.floor(st.created), START], [Math.floor(now()), me().equity]] };
+      case 'loan': { if (!body) return { debt: st.debt || 0, items: [], rate: 0, max: 1e7 }; const amt = +body.amt; if (!(amt >= 1) || amt > 1e7) err('借款金额无效'); st.debt = (st.debt || 0) + amt; add('USDT', amt, 0); save(); return { ok: true, amt, debt: st.debt } }
+      case 'loan/repay': { const amt = +body.amt; if (!(amt >= 1)) err('还款金额无效'); if (amt > (st.debt || 0) + 1e-6) err('还款金额超过欠款'); add('USDT', -amt, 0); st.debt = Math.max(0, (st.debt || 0) - amt); save(); return { ok: true, amt, debt: st.debt } }
       case 'logout': T.exit(); return { ok: true };
     }
     return null;
   };
-  T.handles = path => T.active && ['me', 'order', 'cancel', 'cancel_all', 'orders', 'perp/open', 'perp/close', 'perp/tpsl', 'perp/positions', 'perp/cancel', 'perp/orders', 'perp/funding', 'equity', 'logout'].includes(path.split('?')[0]);
+  T.handles = path => T.active && ['me', 'order', 'cancel', 'cancel_all', 'orders', 'perp/open', 'perp/close', 'perp/tpsl', 'perp/positions', 'perp/cancel', 'perp/orders', 'perp/funding', 'loan', 'loan/repay', 'equity', 'logout'].includes(path.split('?')[0]);
   T.onTick = () => {
     if (!T.active) return; let ch = false;
     for (const o of st.open.slice()) { const t = S.tick[o.sym]; if (!t || o.t > now() - 1) continue;
@@ -180,7 +182,13 @@ const TUT = (() => {
       { t: '.go2', h: '随便点开多或开空，然后盯着持仓。很可能几分钟内就<b>爆仓</b>。这就是高杠杆的风险。', ok: () => st.positions.some(p => p.lev >= 100 && after(p.opened)) || st.phist.some(p => p.lev >= 100 && after(p.opened)), wait: '开仓后自动继续', skip: true },
       { t: '#rec-tabs', pre: () => setRec('pos'), h: '爆仓会弹出提示，并在“合约历史”里显示“强制平仓”。真实交易里请远离高倍杠杆。可以随时点“下一步”结束本章。' }
     ] },
-    { id: 'ai', title: '第 10 章　全部功能 + 让 AI 帮你交易', steps: [
+    { id: 'loan', title: '第 10 章　借贷：没钱了怎么办', steps: [
+      { t: '#loan-btn', pre: () => { location.hash = '#/trade/BTC' }, h: '钱不够下单时<b>不会再报“余额不足”</b>，而是会自动弹出借贷窗口。顶部这个 <b>借贷</b> 按钮也随时可以借钱。教程里借到的是<b>练习钱</b>。' },
+      { t: '#loan-btn', h: '点开<b>借贷</b>试试：随便借一笔（比如 5,000），<b>没有利息</b>，借多久都行。', ok: () => (st.debt || 0) > 0, wait: '借到钱后自动继续', skip: true },
+      { t: '#s-av', h: '借到的钱直接进<b>可用</b>余额，和普通钱一样用。<br>但记住：<b>欠款会从总资产里扣掉</b>。借来的钱亏掉后，<b>收益率会跌破 −100%</b>——“欠债王”就是这么诞生的。' },
+      { t: '#loan-btn', h: '最后记得还款：点<b>借贷</b>，窗口里有<b>还款</b>按钮，不收利息。<br>真实账户里也一样：没钱就借，亏完借的钱，收益率可以跌到 −100% 以下。本章到此结束。' }
+    ] },
+    { id: 'ai', title: '第 11 章　全部功能 + 让 AI 帮你交易', steps: [
       { t: () => mob() ? '#mnav' : '.dnav', u: ['nav'], h: '<i class="tu-tag">新</i>所有页面都解锁了：<b>资产</b>看总资产和收益曲线，<b>排行</b>看大家的收益排名，<b>API</b> 可以让 AI 帮你下单。' },
       { t: '#api', pre: () => { location.hash = '#/api' }, h: '在 API 页登录后可以生成 <b>API Key</b>，把它和页面上那段说明发给你的 AI，它就能替你查行情、下单（真实模拟账户）。' },
       { t: () => $('#copy-prompt') ? '#copy-prompt' : '#api', pre: () => { if (location.hash !== '#/api') location.hash = '#/api' }, h: '点<b>复制这段话</b>，再发给 AI 就行。教程到此结束，去真实模拟账户试试吧！', ok: () => copiedAt >= t0 - 1, wait: '复制后自动完成' }
@@ -297,13 +305,13 @@ body.tl .tu-new{animation:tuNew 1.6s ease 2}@keyframes tuNew{0%,100%{box-shadow:
   const guard = e => {
     if (!e.isTrusted || !T.active || !box || box.hidden) return;
     const x = e.target; if (!(x instanceof Element)) return;
-    if (box.contains(x) || banner.contains(x) || x.closest('#toast')) return;
+    if (box.contains(x) || banner.contains(x) || x.closest('#toast') || x.closest('.modal')) return;
     if (live() && curEl.contains(x)) return;
     e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
     if (e.type === 'click' && ring && curEl) { ring.classList.remove('tut-shake'); void ring.offsetWidth; ring.classList.add('tut-shake') }
   };
   ['click', 'mousedown', 'pointerdown', 'dblclick', 'contextmenu'].forEach(t => document.addEventListener(t, guard, { capture: true, passive: false }));
-  document.addEventListener('focusin', e => { if (!T.active || !box || box.hidden) return; const x = e.target; if (box.contains(x) || banner.contains(x) || (live() && curEl.contains(x))) return; x.blur && x.blur() }, true);
+  document.addEventListener('focusin', e => { if (!T.active || !box || box.hidden) return; const x = e.target; if (box.contains(x) || banner.contains(x) || x.closest('.modal') || (live() && curEl.contains(x))) return; x.blur && x.blur() }, true);
   T.start = () => { ui(); if (!T.active) { T.active = true; S.loggedOut = false; S.hist = S.phist = null; loadMe() } renderBanner(); applyUnlock() };
   T.pause = () => { clearInterval(timer); curEl = null; if (ring) { ring.style.display = 'none'; box.hidden = true } renderBanner() };
   T.exit = () => { T.pause(); T.active = false; if (banner) banner.hidden = true; document.body.classList.remove('tut-on'); applyUnlock(); S.me = null; S.loggedOut = false; S.hist = S.phist = null; save(); loadMe(); toast('已退出教程，回到你的真实模拟账户') };

@@ -17,6 +17,8 @@ QUOTE = 'USDT'
 GATE_SPOT = {'BTW': 'BTW_USDT'}   # OKX 无现货、改走 Gate 现货行情的币：sym -> Gate currency_pair
 GATE_FUT = {'BTW': 'BTW_USDT'}    # OKX 无永续、改走 Gate 合约行情的币：sym -> Gate contract
 INIT = float(os.environ.get('INIT_CAPITAL', os.environ.get('SIM_INIT_BALANCE', 1000000.0)))
+LOAN_MAX = float(os.environ.get('LOAN_MAX', 10000000.0))              # 单笔借款上限 USDT（无利息）
+LOAN_MAX_TOTAL = float(os.environ.get('LOAN_MAX_TOTAL', 1000000000.0))  # 欠款总额上限 USDT
 SPOT_MAKER = float(os.environ.get('SPOT_MAKER', 0.0008))    # OKX regular-user spot fees
 SPOT_TAKER = float(os.environ.get('SPOT_TAKER', 0.001))
 SWAP_MAKER = float(os.environ.get('SWAP_MAKER', 0.0002))   # OKX regular-user USDT-swap fees
@@ -59,7 +61,7 @@ db = sqlite3.connect(os.path.join(DATA_DIR, 'sim.db'), check_same_thread=False, 
 db.execute('PRAGMA journal_mode=WAL')
 db.execute('PRAGMA synchronous=NORMAL')
 db.executescript('''
-CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, ld_id INTEGER UNIQUE, name TEXT, tl INTEGER, avatar TEXT, ip TEXT, created REAL, last_login REAL);
+CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, ld_id INTEGER UNIQUE, name TEXT, tl INTEGER, avatar TEXT, ip TEXT, created REAL, last_login REAL, ann INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS bal(uid INTEGER, asset TEXT, free REAL, locked REAL, PRIMARY KEY(uid, asset));
 CREATE TABLE IF NOT EXISTS orders(id INTEGER PRIMARY KEY, uid INTEGER, sym TEXT, side TEXT, type TEXT, qty REAL, px REAL,
   status TEXT, fill_px REAL, fee REAL, created REAL, done REAL);
@@ -78,13 +80,15 @@ CREATE INDEX IF NOT EXISTS po_open ON porders(status, uid);
 CREATE TABLE IF NOT EXISTS funding(id INTEGER PRIMARY KEY, uid INTEGER, pos_id INTEGER, sym TEXT, side TEXT, rate REAL, amount REAL, ts REAL);
 CREATE INDEX IF NOT EXISTS f_uid ON funding(uid, id);
 CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS loans(id INTEGER PRIMARY KEY, uid INTEGER, amt REAL, ts REAL);
+CREATE INDEX IF NOT EXISTS l_uid ON loans(uid, id);
 ''')
 try:
     db.execute('ALTER TABLE users ADD COLUMN nl_id INTEGER')
 except Exception:
     pass
 db.execute('CREATE UNIQUE INDEX IF NOT EXISTS users_nl ON users(nl_id)')
-for _col in ('ALTER TABLE users ADD COLUMN last_seen REAL', 'ALTER TABLE orders ADD COLUMN locked REAL', 'ALTER TABLE orders ADD COLUMN liq TEXT',
+for _col in ('ALTER TABLE users ADD COLUMN last_seen REAL', 'ALTER TABLE users ADD COLUMN ann INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE orders ADD COLUMN locked REAL', 'ALTER TABLE orders ADD COLUMN liq TEXT',
              'ALTER TABLE positions ADD COLUMN funding REAL DEFAULT 0', 'ALTER TABLE positions ADD COLUMN net REAL', 'ALTER TABLE bal ADD COLUMN cost REAL NOT NULL DEFAULT 0'):
     try:
         db.execute(_col)
@@ -147,9 +151,11 @@ class Cached:
 
 
 class ApiError(Exception):
-    def __init__(self, msg, code=400):
+    def __init__(self, msg, code=400, tag=None, data=None):
         super().__init__(msg)
         self.code = code
+        self.tag = tag
+        self.data = data
 
 
 def num(v, name):
@@ -264,7 +270,11 @@ class H(BaseHTTPRequestHandler):
             else:
                 self.send(res)
         except ApiError as e:
-            self.send({'error': str(e)}, e.code)
+            d = {'error': str(e)}
+            if e.tag:
+                d['code'] = e.tag
+            d.update(e.data or {})
+            self.send(d, e.code)
         except ValueError as e:
             self.send({'error': str(e)}, 400)
         except Exception as e:
@@ -726,6 +736,11 @@ def walk(levels, qty=None, quote=None, limit=None, side='buy'):
 
 
 # ---------------- balances ----------------
+def debt_of(uid):
+    r = db.execute('SELECT COALESCE(SUM(amt),0) FROM loans WHERE uid=?', (uid,)).fetchone()
+    return r[0] if r else 0.0
+
+
 def bal_get(uid, asset):
     r = db.execute('SELECT free, locked FROM bal WHERE uid=? AND asset=?', (uid, asset)).fetchone()
     return (r[0], r[1]) if r else (0.0, 0.0)
@@ -735,7 +750,7 @@ def bal_add(uid, asset, dfree=0.0, dlocked=0.0):
     f, l = bal_get(uid, asset)
     f, l = f + dfree, l + dlocked
     if f < -1e-7 or l < -1e-7:
-        raise ApiError('余额不足')
+        raise ApiError('余额不足', 400, 'need_loan', {'need': round(max(0.0, -f, -l), 2)})
     f, l = max(f, 0.0), max(l, 0.0)
     db.execute('INSERT INTO bal(uid,asset,free,locked) VALUES(?,?,?,?) ON CONFLICT(uid,asset) DO UPDATE SET free=excluded.free, locked=excluded.locked',
                (uid, asset, f, l))
@@ -1381,6 +1396,7 @@ def equity_of(rows, px, uid=None, sw=None):
         for sym, side, qty, entry, margin in db.execute("SELECT sym,side,qty,entry,margin FROM positions WHERE uid=? AND status='open'", (uid,)):
             m = mark_of(sw, sym)
             e += max(0.0, margin + upnl(side, entry, qty, m)) if m else margin
+        e -= debt_of(uid)   # 净资产：欠款无利息，但亏掉借来的钱收益率会跌破 -100%
     return e
 
 
@@ -1403,6 +1419,9 @@ def lb_loop():
                         if uid in eq:
                             m = mark_of(sw, sym)
                             eq[uid] += max(0.0, margin + upnl(side, entry, qty, m)) if m else margin
+                    for u_, d_ in db.execute('SELECT uid, SUM(amt) FROM loans GROUP BY uid').fetchall():
+                        if u_ in eq:
+                            eq[u_] -= d_ or 0.0   # 排行榜按净资产排名，可为负
                 order = sorted(eq.items(), key=lambda kv: -kv[1])
                 RANK = {uid: (i + 1, e) for i, (uid, e) in enumerate(order)}
                 LB = {'ts': int(time.time() * 1000), 'total': len(order), 'init': INIT,
@@ -1458,6 +1477,57 @@ def r_key_revoke(h):
     return {'ok': True}
 
 
+def r_ann(h):
+    """记录用户确认了哪个版本的“更新内容”公告；确认后同账号不再弹出。"""
+    uid = h.uid()
+    try:
+        v = int(h.body().get('v'))
+    except Exception:
+        raise ApiError('参数无效')
+    if not 0 < v <= 1000000:
+        raise ApiError('参数无效')
+    tx(lambda: db.execute('UPDATE users SET ann=MAX(COALESCE(ann,0),?) WHERE id=?', (v, uid)))
+    return {'ok': True, 'ann': v}
+
+
+# ---------------- 借贷（无利息） ----------------
+def r_loan_get(h):
+    uid = h.uid()
+    with DBL:
+        items = [dict(zip(('id', 'amt', 'ts'), r)) for r in
+                 db.execute('SELECT id, amt, ts FROM loans WHERE uid=? ORDER BY id DESC LIMIT 50', (uid,))]
+    return {'debt': round(debt_of(uid), 2), 'items': items, 'rate': 0.0, 'max': LOAN_MAX}
+
+
+def r_loan_add(h):
+    uid = h.uid()
+    amt = num(h.body().get('amt'), '金额')
+    if amt > LOAN_MAX:
+        raise ApiError('单笔最多借 %s USDT' % LOAN_MAX)
+    if debt_of(uid) + amt > LOAN_MAX_TOTAL:
+        raise ApiError('欠款总额已达上限')
+
+    def run():
+        db.execute('INSERT INTO loans(uid,amt,ts) VALUES(?,?,?)', (uid, amt, time.time()))
+        bal_add(uid, QUOTE, amt, 0.0)
+    tx(run)
+    return {'ok': True, 'amt': amt, 'debt': round(debt_of(uid), 2)}
+
+
+def r_loan_repay(h):
+    uid = h.uid()
+    amt = num(h.body().get('amt'), '金额')
+    d = debt_of(uid)
+    if amt > d + 1e-6:
+        raise ApiError('还款金额超过欠款（当前欠款 %s）' % round(d, 2))
+
+    def run():
+        bal_add(uid, QUOTE, -amt, 0.0)   # 可用余额不够还款时带 need_loan 标记返回
+        db.execute('INSERT INTO loans(uid,amt,ts) VALUES(?,?,?)', (uid, -amt, time.time()))
+    tx(run)
+    return {'ok': True, 'amt': amt, 'debt': round(debt_of(uid), 2)}
+
+
 # ---------------- perpetual contracts (USDT-margined, isolated) ----------------
 PERP_FEE = 0.0005
 
@@ -1474,7 +1544,7 @@ def r_me(h):
     touch(uid)
     p, sw = cur_px() or {}, cur_swap()
     with DBL:
-        name, created, avatar = db.execute('SELECT name, created, avatar FROM users WHERE id=?', (uid,)).fetchone()
+        name, created, avatar, ann = db.execute('SELECT name, created, avatar, ann FROM users WHERE id=?', (uid,)).fetchone()
         rows = db.execute('SELECT asset, free, locked, cost FROM bal WHERE uid=?', (uid,)).fetchall()
         bal = {a: [f, l] for a, f, l, c in rows if f + l > 1e-12 or a == QUOTE}
         cost = {a: c for a, f, l, c in rows if a != QUOTE and f + l > 1e-12}
@@ -1484,7 +1554,7 @@ def r_me(h):
         pos = [pos_row(r, sw) for r in db.execute("SELECT %s FROM positions WHERE uid=? AND status='open' ORDER BY id DESC" % ','.join(POS_COLS), (uid,))]
         pord = [dict(zip(PORD_COLS, r)) for r in db.execute("SELECT %s FROM porders WHERE uid=? AND status='open' ORDER BY id DESC" % ','.join(PORD_COLS), (uid,))]
     rk = RANK.get(uid)
-    return {'name': name, 'avatar': avatar or '', 'acct': '%d:%d' % (uid, int(created or 0)), 'init': INIT, 'fee': SPOT_TAKER, 'fees': {'spot': [SPOT_MAKER, SPOT_TAKER], 'swap': [SWAP_MAKER, SWAP_TAKER]},
+    return {'name': name, 'avatar': avatar or '', 'acct': '%d:%d' % (uid, int(created or 0)), 'init': INIT, 'ann': ann or 0, 'debt': round(debt_of(uid), 2), 'fee': SPOT_TAKER, 'fees': {'spot': [SPOT_MAKER, SPOT_TAKER], 'swap': [SWAP_MAKER, SWAP_TAKER]},
             'perp_fee': SWAP_TAKER, 'max_lev': MAX_LEV, 'bal': bal, 'cost': cost, 'equity': eq, 'positions': pos, 'porders': pord,
             'open': [dict(zip(('id', 'sym', 'side', 'type', 'qty', 'px', 't'), x)) for x in opn],
             'hist': [dict(zip(('id', 'sym', 'side', 'type', 'qty', 'px', 'status', 'fpx', 'fee', 't', 'liq'), x)) for x in hist],
@@ -1608,6 +1678,10 @@ ROUTES = {
     ('GET', '/api/auth/nodeloc/login'): r_nl_login,
     ('GET', '/api/auth/nodeloc/callback'): r_nl_callback,
     ('POST', '/api/logout'): r_logout,
+    ('POST', '/api/ann'): r_ann,
+    ('GET', '/api/loan'): r_loan_get,
+    ('POST', '/api/loan'): r_loan_add,
+    ('POST', '/api/loan/repay'): r_loan_repay,
     ('GET', '/api/me'): r_me,
     ('POST', '/api/order'): r_order,
     ('POST', '/api/cancel'): r_cancel,

@@ -7,7 +7,7 @@ Base URL: `https://your-domain.com/api/v1` (或本地 `http://127.0.0.1:8300/api
 - 公共行情接口（`/market/*`、`/leaderboard`）无需认证。
 - 账户与交易接口需要请求头：`Authorization: Bearer <API_KEY>`。
 - API Key 由用户在网页「AI 接口」页登录 LINUX DO 后生成；一个账户同时只有一个 Key，重新生成后旧 Key 立即失效。
-- 请求体一律 JSON：`Content-Type: application/json`。错误时返回非 2xx 和 `{"error": "原因"}`。
+- 请求体一律 JSON：`Content-Type: application/json`。错误时返回非 2xx 和 `{"error": "原因"}`；余额不足时另带 `"code":"need_loan"` 与 `"need"` 缺口金额（可借款后重试）。
 
 ## 交易规则（与 OKX 一致，服务端权威，客户端无法指定成交价）
 - `sym` 传 `BTC`、`BTC-USDT`、`BTCUSDT` 均可。现货列表 `symbols`，有永续合约的列表 `perp_symbols`（见 `/market/symbols`）。
@@ -33,13 +33,27 @@ Base URL: `https://your-domain.com/api/v1` (或本地 `http://127.0.0.1:8300/api
 
 ## 账户
 ### GET /me
-返回：`porders` 合约挂单；`bal` `{资产: [可用, 冻结]}`；`cost` `{币种: 持仓总成本 USDT}`（均价 = cost / 数量）；`open` 当前挂单；`hist` 最近 30 条已完成委托；`positions` 合约持仓（含 `mark` `upnl` `roe` `liq`）；`equity` 总资产；`rank`/`total` 排名。
+返回：`porders` 合约挂单；`bal` `{资产: [可用, 冻结]}`；`cost` `{币种: 持仓总成本 USDT}`（均价 = cost / 数量）；`open` 当前挂单；`hist` 最近 30 条已完成委托；`positions` 合约持仓（含 `mark` `upnl` `roe` `liq`）；`equity` 总资产（净值，已扣除欠款）；`debt` 当前欠款；`rank`/`total` 排名；`ann` 已确认的公告版本（网页“更新内容”弹窗用，0 = 未确认）。
 
 ### GET /orders
 参数：`status`=open/filled/cancelled/done/all（默认 all），`sym`，`limit`（≤200，默认 50），`before`（订单 id，用于翻页）。
 
 ### GET /equity
 收益曲线 `points`: `[[unix秒, 总资产], ...]`（约每 15 分钟一个点）。
+
+### POST /ann
+`{"v": 公告版本}`：确认已看过某版本的“更新内容”公告（网页弹窗点“确认”时调用），同账号之后不再弹出。返回 `{"ok":true}`。
+
+## 借贷（无利息）
+- 钱不够下单时不再直接失败，返回 `{"error":"余额不足","code":"need_loan","need":缺口USDT}`，调用 `/loan` 借钱后重试即可（网页端会自动弹出借贷窗口）。
+- 借款**没有利息**，随时可还；欠款从总资产（`equity` 为净资产 = 总资产 − 欠款）中扣除，**亏掉借来的钱会让收益率跌破 -100%**。
+- 单笔最多 10,000,000 USDT，欠款总额上限 1,000,000,000 USDT。
+
+| 方法 | 路径 | 参数 | 返回 |
+|---|---|---|---|
+| GET | /loan | – | `debt` 当前欠款、`items` 借贷记录、`rate` 利率（恒 0） |
+| POST | /loan | `amt` | `{ok, amt, debt}` 借入 USDT 到可用余额 |
+| POST | /loan/repay | `amt` | `{ok, amt, debt}` 用可用余额还款（余额不够同样返回 `need_loan`） |
 
 ## 现货交易
 ### POST /order
