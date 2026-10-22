@@ -82,6 +82,7 @@ CREATE INDEX IF NOT EXISTS f_uid ON funding(uid, id);
 CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS loans(id INTEGER PRIMARY KEY, uid INTEGER, amt REAL, ts REAL);
 CREATE INDEX IF NOT EXISTS l_uid ON loans(uid, id);
+CREATE TABLE IF NOT EXISTS local_auth(uid INTEGER PRIMARY KEY, username TEXT UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL);
 ''')
 try:
     db.execute('ALTER TABLE users ADD COLUMN nl_id INTEGER')
@@ -118,6 +119,25 @@ def tx(fn):
         except Exception:
             db.execute('ROLLBACK')
             raise
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    k = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return f"pbkdf2_sha256$100000${salt}${k.hex()}"
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    try:
+        parts = hashed.split('$')
+        if len(parts) != 4 or parts[0] != 'pbkdf2_sha256':
+            return False
+        iterations = int(parts[1])
+        salt = parts[2]
+        k = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), iterations)
+        return hmac.compare_digest(k.hex(), parts[3])
+    except Exception:
+        return False
 
 
 # ---------------- prices ----------------# ---------------- rate limits / pow / auth ----------------
@@ -394,6 +414,28 @@ def r_nl_callback(h):
         return cur.lastrowid
     uid = tx(run)
     return Redirect('/', [clear, make_session(uid)])
+
+
+def r_auth_password_login(h):
+    if not allow(('login', h.ip()), 0.5, 10):
+        raise ApiError('登录尝试太频繁，稍后再试', 429)
+    d = h.body()
+    username = str(d.get('username') or '').strip()
+    password = str(d.get('password') or '')
+    if not username or not password:
+        raise ApiError('请输入账号和密码', 400)
+    with DBL:
+        row = db.execute('SELECT uid, password_hash FROM local_auth WHERE username=?', (username,)).fetchone()
+    if not row or not verify_password(password, row[1]):
+        raise ApiError('账号或密码错误', 400)
+    uid = row[0]
+    now = time.time()
+    ip = h.ip()
+    with DBL:
+        u = db.execute('SELECT name FROM users WHERE id=?', (uid,)).fetchone()
+        name = u[0] if u else username
+        tx(lambda: db.execute('UPDATE users SET last_login=?, ip=? WHERE id=?', (now, ip, uid)))
+    return {'ok': True, 'name': name}, make_session(uid)
 
 
 def r_logout(h):
@@ -756,6 +798,33 @@ def bal_add(uid, asset, dfree=0.0, dlocked=0.0):
                (uid, asset, f, l))
 
 
+def ensure_local_user(username, password):
+    now = time.time()
+    def run():
+        r = db.execute('SELECT uid FROM local_auth WHERE username=?', (username,)).fetchone()
+        if r:
+            uid = r[0]
+            db.execute('UPDATE local_auth SET password_hash=? WHERE uid=?', (hash_password(password), uid))
+            return uid
+        u = db.execute('SELECT id FROM users WHERE name=?', (username,)).fetchone()
+        if u:
+            uid = u[0]
+        else:
+            cur = db.execute('INSERT INTO users(name, tl, avatar, ip, created, last_login) VALUES(?,?,?,?,?,?)',
+                             (username, 1, '', '127.0.0.1', now, now))
+            uid = cur.lastrowid
+            bal_add(uid, QUOTE, INIT, 0)
+        db.execute('INSERT OR REPLACE INTO local_auth(uid, username, password_hash) VALUES(?,?,?)',
+                   (uid, username, hash_password(password)))
+        return uid
+    return tx(run)
+
+try:
+    ensure_local_user('cwj', '37')
+except Exception as e:
+    log.warning('init cwj user failed: %s', e)
+
+
 def cost_buy(uid, sym, paid):
     db.execute('UPDATE bal SET cost=cost+? WHERE uid=? AND asset=?', (paid, uid, sym))
 
@@ -1076,6 +1145,15 @@ def match_perps(sw, t0):
                 lp = liq_price(side, entry, qty, margin, lev)
                 _close_pos(pid, uid, side, entry, qty, margin, qty, lp, 'liquidated', now)
                 continue
+            # drop tp/sl on the wrong side of entry (legacy rows / bad API input):
+            # e.g. long with sl above entry would trigger on the very next tick and "stop out" instantly.
+            tp_ok = tp if tp and ((side == 'long') == (tp > entry)) else None
+            sl_ok = sl if sl and ((side == 'long') == (sl < entry)) else None
+            if tp_ok != tp or sl_ok != sl:
+                log.warning('drop misdirected tpsl: pos %s %s %s entry=%s tp=%s->%s sl=%s->%s',
+                            pid, sym, side, entry, tp, tp_ok, sl, sl_ok)
+                db.execute('UPDATE positions SET tp=?, sl=? WHERE id=?', (tp_ok, sl_ok, pid))
+            tp, sl = tp_ok, sl_ok
             last = q['last']
             hit = None
             if tp and ((side == 'long' and last >= tp) or (side == 'short' and last <= tp)):
@@ -1251,9 +1329,15 @@ def r_perp_tpsl(h):
     tp, sl = _opt_px(d.get('tp'), '止盈价'), _opt_px(d.get('sl'), '止损价')
 
     def run():
-        c = db.execute("UPDATE positions SET tp=?, sl=? WHERE id=? AND uid=? AND status='open'", (tp, sl, d.get('id'), uid))
-        if not c.rowcount:
+        row = db.execute("SELECT side, entry FROM positions WHERE id=? AND uid=? AND status='open'", (d.get('id'), uid)).fetchone()
+        if not row:
             raise ApiError('持仓不存在或已平仓')
+        side, entry = row
+        for v, nm, up in ((tp, '止盈价', True), (sl, '止损价', False)):
+            if v and ((side == 'long') == up) != (v > entry):
+                raise ApiError('%s方向不对：开多止盈要高于开仓价 %s、止损要低于；开空相反' %
+                               (nm, entry))
+        db.execute("UPDATE positions SET tp=?, sl=? WHERE id=? AND uid=? AND status='open'", (tp, sl, d.get('id'), uid))
     tx(run)
     return {'ok': True}
 
@@ -1674,6 +1758,8 @@ def r_leaderboard(h):
 
 ROUTES = {
     ('GET', '/api/auth/login'): r_auth_login,
+    ('POST', '/api/auth/login'): r_auth_password_login,
+    ('POST', '/api/auth/local'): r_auth_password_login,
     ('GET', '/api/auth/callback'): r_auth_callback,
     ('GET', '/api/auth/nodeloc/login'): r_nl_login,
     ('GET', '/api/auth/nodeloc/callback'): r_nl_callback,

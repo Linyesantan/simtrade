@@ -85,6 +85,7 @@ Base URL: `https://your-domain.com/api/v1` (或本地 `http://127.0.0.1:8300/api
 返回：`px` 平仓价、`pnl` 已实现盈亏（已扣手续费）。
 
 ### POST /perp/tpsl  `{"id": 持仓id, "tp": 3300, "sl": null}`（传 null 或 0 取消）
+方向必须正确，否则拒绝：开多止盈要高于开仓价、止损要低于；开空相反（与 /perp/open 同规则）。方向不对的止损一保存就会被立即触发秒平，所以服务端直接拦下。
 
 ### GET /perp/positions  `?status=open|closed`
 

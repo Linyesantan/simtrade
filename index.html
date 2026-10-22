@@ -17,7 +17,22 @@
   <div class="user" id="user"></div>
 </header>
 
-<div class="gate" id="gate"><div class="gate-c"><h2>◆ 虚拟币模拟盘</h2><p>请先使用 LINUX DO 或 NodeLoc 账号登录</p><a class="btn-y" href="/api/auth/login">LINUX DO 登录</a><a class="btn-y btn-nl" href="/api/auth/nodeloc/login">NodeLoc 登录</a></div></div>
+<div class="gate" id="gate">
+  <div class="gate-c">
+    <h2>◆ 虚拟币模拟盘</h2>
+    <p>请登录后体验模拟交易</p>
+    <form id="gate-login-form" class="login-form">
+      <div class="form-item"><input type="text" id="gate-user" placeholder="账号" autocomplete="username" required></div>
+      <div class="form-item"><input type="password" id="gate-pass" placeholder="密码" autocomplete="current-password" required></div>
+      <button type="submit" class="btn-y btn-block" id="gate-login-btn">登 录</button>
+    </form>
+    <div class="gate-divider"><span>或第三方登录</span></div>
+    <div class="gate-oauth">
+      <a class="btn-g" href="/api/auth/login">LINUX DO 登录</a>
+      <a class="btn-g btn-nl" href="/api/auth/nodeloc/login">NodeLoc 登录</a>
+    </div>
+  </div>
+</div>
 
 <main id="app">
   <!-- ============ 交易 ============ -->

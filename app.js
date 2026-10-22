@@ -184,6 +184,60 @@ function userBadges(uid, name) {
   return '';
 }
 
+async function doPasswordLogin(username, password, btn) {
+  if (!username || !password) {
+    toast('请输入账号和密码', 'err');
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    await api('auth/login', { username, password });
+    toast('登录成功', 'ok');
+    S.loggedOut = false;
+    const m = document.querySelector('.login-modal');
+    if (m) m.remove();
+    await loadMe();
+    location.reload();
+  } catch (err) {
+    toast(err.message || '登录失败', 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function openLoginModal() {
+  if (document.querySelector('.login-modal')) return;
+  const box = document.createElement('div');
+  box.className = 'modal login-modal';
+  box.innerHTML = `<div class="modal-c" style="max-width:320px;text-align:center">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0">账号登录</h3>
+      <button class="btn-g" id="login-modal-close" style="padding:2px 8px;font-size:16px;cursor:pointer">&times;</button>
+    </div>
+    <form id="modal-login-form" class="login-form">
+      <div class="form-item"><input type="text" id="m-login-user" placeholder="账号" autocomplete="username" required></div>
+      <div class="form-item"><input type="password" id="m-login-pass" placeholder="密码" autocomplete="current-password" required></div>
+      <button type="submit" class="btn-y btn-block" id="m-login-btn">登 录</button>
+    </form>
+    <div class="gate-divider"><span>或第三方登录</span></div>
+    <div class="gate-oauth">
+      <a class="btn-g" href="/api/auth/login">LINUX DO 登录</a>
+      <a class="btn-g btn-nl" href="/api/auth/nodeloc/login">NodeLoc 登录</a>
+    </div>
+  </div>`;
+  document.body.appendChild(box);
+  box.querySelector('#login-modal-close').onclick = () => box.remove();
+  box.onclick = e => { if (e.target === box) box.remove() };
+  const form = box.querySelector('#modal-login-form');
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const u = (box.querySelector('#m-login-user').value || '').trim();
+    const p = box.querySelector('#m-login-pass').value || '';
+    await doPasswordLogin(u, p, box.querySelector('#m-login-btn'));
+  };
+  box.querySelector('#m-login-user').focus();
+}
+
 function renderUser() {
   const u = $('#user');
   if (S.me && S.me.tutorial) u.innerHTML = `<button class="btn-g" id="loan-btn">借贷</button><span class="mut num">练习资金 ${fu(S.me.equity)} U</span>`;
@@ -191,11 +245,12 @@ function renderUser() {
     const isG = isGeniusUser(S.me.uid, S.me.name);
     u.innerHTML = `<a class="btn-g" href="#/guide">教程</a><button class="btn-g" id="loan-btn" title="无息借贷">借贷</button><span class="mut num eqtop" title="总资产（净资产，已扣除欠款）">${fu(S.me.equity)} U</span><span class="uname ${isG ? 'uname-genius' : ''}">${S.me.avatar ? `<img class="av ${isG ? 'av-genius' : ''}" src="${esc(S.me.avatar)}" alt="" referrerpolicy="no-referrer">` : ''}${esc(S.me.name)}</span>${userBadges(S.me.uid, S.me.name)}<button class="btn-g" id="logout">退出</button>`;
   }
-  else u.innerHTML = `<a class="btn-y" href="/api/auth/login">LINUX DO</a> <a class="btn-y btn-nl" href="/api/auth/nodeloc/login">NodeLoc</a>`;
+  else u.innerHTML = `<button class="btn-y" id="top-login-btn">登录</button> <a class="btn-g" href="/api/auth/login">LINUX DO</a> <a class="btn-g btn-nl" href="/api/auth/nodeloc/login">NodeLoc</a>`;
   document.body.classList.toggle('guest', !S.me && S.loggedOut && !(typeof TUT !== 'undefined' && TUT.active));
   const te = $('#tut-exit'); if (te) te.onclick = () => TUT.exit();
   const lo = $('#logout'); if (lo) lo.onclick = async () => { await api('logout', {}); S.me = null; S.loggedOut = true; renderAll() };
   const ln = $('#loan-btn'); if (ln) ln.onclick = () => openLoan();
+  const tl = $('#top-login-btn'); if (tl) tl.onclick = () => openLoginModal();
 }
 async function loadMe() {
   const tut = typeof TUT !== 'undefined' && TUT.active;
@@ -434,7 +489,7 @@ function initPctPx() {
 initPctPx();
 $('#s-qty').oninput = () => calcSpot('qty'); $('#s-tot').oninput = () => calcSpot('tot');
 $('#s-go').onclick = async () => {
-  if (!S.me) { location.href = '/api/auth/login'; return }
+  if (!S.me) { openLoginModal(); return }
   const buy = S.side === 'buy', mkt = S.otype === 'market', v = +$('#s-qty').value;
   if (!v) { toast(mkt && buy ? '请输入金额' : '请输入数量', 'err'); return }
   const body = { sym: S.sym, side: S.side, type: S.otype };
@@ -495,7 +550,7 @@ function calcPerp() {
   else w.hidden = true;
 }
 async function perpOpen(side) {
-  if (!S.me) { location.href = '/api/auth/login'; return }
+  if (!S.me) { openLoginModal(); return }
   const m = +$('#p-mg').value; if (!m) { toast('请输入保证金', 'err'); return }
   const L = lev(); if (L >= 100 && !confirm(`确定以 ${L} 倍杠杆${side === 'long' ? '开多' : '开空'}？\n价格小幅反向波动就会爆仓（虚拟资金）。`)) return;
   const body = { sym: S.sym, side, lev: L, margin: m, type: S.potype }; if (S.potype === 'limit') { body.px = +$('#p-px').value; if (!body.px) { toast('请输入限价', 'err'); return } } const tp = +$('#p-tp').value, sl = +$('#p-sl').value; if (tp) body.tp = tp; if (sl) body.sl = sl;
@@ -546,7 +601,7 @@ async function onPosClick(e) {
   if (c) { const pct = +c.dataset.close; c.disabled = true; try { const r = await api('perp/close', { id, pct }); toast(`已平仓 ${pct}% @ ${fp(r.px)}，盈亏 ${r.pnl >= 0 ? '+' : ''}${fu(r.pnl)} USDT`, r.pnl >= 0 ? 'ok' : 'err'); S.phist = null; await loadMe() } catch (er) { toast(er.message, 'err') } c.disabled = false; return }
   const ch = e.target.closest('.tp-chips button[data-r]'); if (ch) { const p = posOf(id); if (p) tpslSet(card, p, ch.closest('.tp-chips').dataset.k, +ch.dataset.r); return }
   if (e.target.closest('[data-tpsl]')) { const b = card.querySelector('.pos-tpsl'); b.hidden = !b.hidden; S.tpo = S.tpo || new Set(); b.hidden ? S.tpo.delete(id) : S.tpo.add(id); return }
-  if (e.target.closest('[data-save]')) { try { await api('perp/tpsl', { id, tp: +card.querySelector('[data-tp]').value || null, sl: +card.querySelector('[data-sl]').value || null }); toast('止盈止损已更新'); if (S.tpv) delete S.tpv[id]; await loadMe() } catch (er) { toast(er.message, 'err') } }
+  if (e.target.closest('[data-save]')) { const tp = +card.querySelector('[data-tp]').value || null, sl = +card.querySelector('[data-sl]').value || null; const p = posOf(id), dir = p && p.side === 'long' ? 1 : -1; if (p && tp && (tp - p.entry) * dir <= 0) { toast('止盈价方向不对：开多止盈要高于开仓价、开空要低于', 'err'); return } if (p && sl && (sl - p.entry) * dir >= 0) { toast('止损价方向不对：开多止损要低于开仓价、开空要高于', 'err'); return } try { await api('perp/tpsl', { id, tp, sl }); toast('止盈止损已更新'); if (S.tpv) delete S.tpv[id]; await loadMe() } catch (er) { toast(er.message, 'err') } }
 }
 $('#rec-body').onclick = async e => {
   const pc = e.target.closest('[data-pcancel]');
@@ -686,7 +741,7 @@ POST ${host}/api/v1/loan 无息借贷 {amt}；POST ${host}/api/v1/loan/repay 还
   <tr><td>GET /api/v1/orders?status=done</td><td>历史委托，支持 sym / limit / before 分页</td></tr>
   <tr><td>POST /api/v1/perp/open</td><td>开合约 {sym, side:long|short, lev:1-400, margin, tp?, sl?}</td></tr>
   <tr><td>POST /api/v1/perp/close</td><td>平仓 {id, pct?}，pct 默认 100</td></tr>
-  <tr><td>POST /api/v1/perp/tpsl</td><td>修改止盈止损 {id, tp, sl}</td></tr>
+  <tr><td>POST /api/v1/perp/tpsl</td><td>修改止盈止损 {id, tp, sl}（方向要对：开多止盈高于开仓价、止损低于；开空相反）</td></tr>
   <tr><td>GET /api/v1/perp/positions?status=open|closed</td><td>合约持仓 / 历史</td></tr>
   <tr><td>GET /api/v1/equity · /leaderboard</td><td>收益曲线 · 排行榜</td></tr>
   <tr><td>GET /api/v1/loan</td><td>当前欠款与借贷记录（无利息）</td></tr>
@@ -788,6 +843,15 @@ function renderAll() { renderUser(); renderForm(); renderRecords(); renderAssets
 
 window.addEventListener('DOMContentLoaded', () => {
 initTips(); initChart();
+const gf = $('#gate-login-form');
+if (gf) {
+  gf.onsubmit = async e => {
+    e.preventDefault();
+    const user = ($('#gate-user') && $('#gate-user').value || '').trim();
+    const pass = ($('#gate-pass') && $('#gate-pass').value) || '';
+    await doPasswordLogin(user, pass, $('#gate-login-btn'));
+  };
+}
 $$('#tfs button').forEach(b => b.classList.toggle('on', b.dataset.tf === S.tf));
 setMode(S.mode); setLev(LS.get('lev', 20)); $('#lev').addEventListener('change', () => LS.set('lev', lev())); $('#lev-r').addEventListener('change', () => LS.set('lev', lev()));
 $('#v-trade').dataset.pane = 'form';
