@@ -191,16 +191,16 @@ async function doPasswordLogin(username, password, btn) {
   }
   if (btn) btn.disabled = true;
   try {
-    await api('auth/login', { username, password });
+    const res = await api('auth/login', { username, password });
     toast('登录成功', 'ok');
     S.loggedOut = false;
     const m = document.querySelector('.login-modal');
     if (m) m.remove();
-    await loadMe();
-    location.reload();
+    setTimeout(() => {
+      location.href = '/';
+    }, 300);
   } catch (err) {
     toast(err.message || '登录失败', 'err');
-  } finally {
     if (btn) btn.disabled = false;
   }
 }
@@ -214,10 +214,10 @@ function openLoginModal() {
       <h3 style="margin:0">账号登录</h3>
       <button class="btn-g" id="login-modal-close" style="padding:2px 8px;font-size:16px;cursor:pointer">&times;</button>
     </div>
-    <form id="modal-login-form" class="login-form">
-      <div class="form-item"><input type="text" id="m-login-user" placeholder="账号" autocomplete="username" required></div>
+    <form id="modal-login-form" class="login-form" action="javascript:void(0)" onsubmit="return false;">
+      <div class="form-item"><input type="text" id="m-login-user" placeholder="账号" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></div>
       <div class="form-item"><input type="password" id="m-login-pass" placeholder="密码" autocomplete="current-password" required></div>
-      <button type="submit" class="btn-y btn-block" id="m-login-btn">登 录</button>
+      <button type="button" class="btn-y btn-block" id="m-login-btn">登 录</button>
     </form>
     <div class="gate-divider"><span>或第三方登录</span></div>
     <div class="gate-oauth">
@@ -228,13 +228,14 @@ function openLoginModal() {
   document.body.appendChild(box);
   box.querySelector('#login-modal-close').onclick = () => box.remove();
   box.onclick = e => { if (e.target === box) box.remove() };
-  const form = box.querySelector('#modal-login-form');
-  form.onsubmit = async e => {
-    e.preventDefault();
+  const submitModal = async () => {
     const u = (box.querySelector('#m-login-user').value || '').trim();
     const p = box.querySelector('#m-login-pass').value || '';
     await doPasswordLogin(u, p, box.querySelector('#m-login-btn'));
   };
+  box.querySelector('#m-login-btn').onclick = submitModal;
+  box.querySelector('#m-login-pass').onkeydown = e => { if (e.key === 'Enter') submitModal() };
+  box.querySelector('#m-login-user').onkeydown = e => { if (e.key === 'Enter') box.querySelector('#m-login-pass').focus() };
   box.querySelector('#m-login-user').focus();
 }
 
@@ -843,15 +844,19 @@ function renderAll() { renderUser(); renderForm(); renderRecords(); renderAssets
 
 window.addEventListener('DOMContentLoaded', () => {
 initTips(); initChart();
+const submitGate = async () => {
+  const user = ($('#gate-user') && $('#gate-user').value || '').trim();
+  const pass = ($('#gate-pass') && $('#gate-pass').value) || '';
+  await doPasswordLogin(user, pass, $('#gate-login-btn'));
+};
+const gb = $('#gate-login-btn');
+if (gb) gb.onclick = submitGate;
+const gp = $('#gate-pass');
+if (gp) gp.onkeydown = e => { if (e.key === 'Enter') submitGate() };
+const gu = $('#gate-user');
+if (gu) gu.onkeydown = e => { if (e.key === 'Enter') gp && gp.focus() };
 const gf = $('#gate-login-form');
-if (gf) {
-  gf.onsubmit = async e => {
-    e.preventDefault();
-    const user = ($('#gate-user') && $('#gate-user').value || '').trim();
-    const pass = ($('#gate-pass') && $('#gate-pass').value) || '';
-    await doPasswordLogin(user, pass, $('#gate-login-btn'));
-  };
-}
+if (gf) gf.onsubmit = e => { e.preventDefault(); submitGate(); return false };
 $$('#tfs button').forEach(b => b.classList.toggle('on', b.dataset.tf === S.tf));
 setMode(S.mode); setLev(LS.get('lev', 20)); $('#lev').addEventListener('change', () => LS.set('lev', lev())); $('#lev-r').addEventListener('change', () => LS.set('lev', lev()));
 $('#v-trade').dataset.pane = 'form';

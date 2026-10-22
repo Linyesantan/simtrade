@@ -420,7 +420,7 @@ def r_auth_password_login(h):
     if not allow(('login', h.ip()), 0.5, 10):
         raise ApiError('登录尝试太频繁，稍后再试', 429)
     d = h.body()
-    username = str(d.get('username') or '').strip()
+    username = str(d.get('username') or '').strip().lower()
     password = str(d.get('password') or '')
     if not username or not password:
         raise ApiError('请输入账号和密码', 400)
@@ -800,6 +800,7 @@ def bal_add(uid, asset, dfree=0.0, dlocked=0.0):
 
 def ensure_local_user(username, password):
     now = time.time()
+    username = username.strip().lower()
     def run():
         r = db.execute('SELECT uid FROM local_auth WHERE username=?', (username,)).fetchone()
         if r:

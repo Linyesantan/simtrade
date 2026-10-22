@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0e11">
 <title>虚拟币模拟盘</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M8 0l8 8-8 8-8-8z%22 fill=%22%23f0b90b%22/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/app.css?v=41">
+<link rel="stylesheet" href="/app.css?v=20261022_55">
 </head>
 <body>
 <header class="top">
@@ -21,10 +21,10 @@
   <div class="gate-c">
     <h2>◆ 虚拟币模拟盘</h2>
     <p>请登录后体验模拟交易</p>
-    <form id="gate-login-form" class="login-form">
-      <div class="form-item"><input type="text" id="gate-user" placeholder="账号" autocomplete="username" required></div>
+    <form id="gate-login-form" class="login-form" action="javascript:void(0)" onsubmit="return false;">
+      <div class="form-item"><input type="text" id="gate-user" placeholder="账号" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></div>
       <div class="form-item"><input type="password" id="gate-pass" placeholder="密码" autocomplete="current-password" required></div>
-      <button type="submit" class="btn-y btn-block" id="gate-login-btn">登 录</button>
+      <button type="button" class="btn-y btn-block" id="gate-login-btn">登 录</button>
     </form>
     <div class="gate-divider"><span>或第三方登录</span></div>
     <div class="gate-oauth">
@@ -202,7 +202,7 @@
 
 <script src="/lib/lwc.js"></script>
 <script src="/coins.js?v=6"></script>
-<script src="/app.js?v=31"></script>
+<script src="/app.js?v=20261022_55"></script>
 <script src="/tutorial.js?v=36"></script>
 </body>
 </html>
